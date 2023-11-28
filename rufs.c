@@ -25,19 +25,43 @@
 char diskfile_path[PATH_MAX];
 
 // Declare your in-memory data structures here
-
+struct superblock sb;
 /* 
  * Get available inode number from bitmap
  */
 int get_avail_ino() {
+    // Step 1: Read inode bitmap from disk
+    bitmap_t inode_bitmap = (bitmap_t)malloc(BLOCK_SIZE);
+    if (!inode_bitmap) {
+        perror("Failed to allocate memory for inode bitmap");
+        return -1;
+    }
 
-	// Step 1: Read inode bitmap from disk
-	
-	// Step 2: Traverse inode bitmap to find an available slot
+    // Assuming the inode bitmap is located at sb.i_bitmap_blk
+    if (bio_read(sb.i_bitmap_blk, inode_bitmap) < 0) {
+        perror("Failed to read inode bitmap from disk");
+        free(inode_bitmap);
+        return -1;
+    }
 
-	// Step 3: Update inode bitmap and write to disk 
+    // Step 2: Traverse inode bitmap to find an available slot
+    for (int i = 0; i < MAX_INUM; i++) {
+        if (get_bitmap(inode_bitmap, i) == 0) { // Found a free inode
+            // Step 3: Update inode bitmap and write to disk 
+            set_bitmap(inode_bitmap, i);
+            if (bio_write(sb.i_bitmap_blk, inode_bitmap) < 0) {
+                perror("Failed to write updated inode bitmap to disk");
+                free(inode_bitmap);
+                return -1;
+            }
+            free(inode_bitmap);
+            return i; // Return the available inode number
+        }
+    }
 
-	return 0;
+    // No available inode found
+    free(inode_bitmap);
+    return -1;
 }
 
 /* 
