@@ -22,6 +22,8 @@ struct superblock {
 	uint32_t	magic_num;			/* magic number */
 	uint16_t	max_inum;			/* maximum inode number */
 	uint16_t	max_dnum;			/* maximum data block number */
+
+	// below determined by inode, dirent, MAX_INUM, MAX_DNUM
 	uint32_t	i_bitmap_blk;		/* start block of inode bitmap */
 	uint32_t	d_bitmap_blk;		/* start block of data block bitmap */
 	uint32_t	i_start_blk;		/* start block of inode region */

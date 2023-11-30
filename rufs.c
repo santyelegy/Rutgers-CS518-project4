@@ -164,9 +164,22 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 int rufs_mkfs() {
 
 	// Call dev_init() to initialize (Create) Diskfile
+	dev_init(diskfile_path);
 
 	// write superblock information
+	struct superblock sb;
+	sb.magic_num = MAGIC_NUM;
+	sb.max_dnum = MAX_DNUM;
+	sb.max_inum = MAX_INUM;
 
+	sb.i_bitmap_blk = 1;
+	sb.d_bitmap_blk = 2;
+	
+	int total_inode_size = (MAX_INUM*sizeof(struct inode) + BLOCK_SIZE -1);
+	int number_of_inode_blocks = total_inode_size/BLOCK_SIZE;
+	sb.i_start_blk = 3;
+	sb.d_bitmap_blk = sb.i_start_blk + number_of_inode_blocks;
+	
 	// initialize inode bitmap
 
 	// initialize data block bitmap
