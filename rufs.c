@@ -164,7 +164,7 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 int rufs_mkfs() {
 
 	// Call dev_init() to initialize (Create) Diskfile
-	dev_init(diskfile_path);
+	dev_init(diskfile_path); // Initialize the disk file using dev_init(), using the diskfile_path as the file path
 
 	// write superblock information
 	struct superblock sb;
@@ -175,18 +175,45 @@ int rufs_mkfs() {
 	sb.i_bitmap_blk = 1;
 	sb.d_bitmap_blk = 2;
 	
-	int total_inode_size = (MAX_INUM*sizeof(struct inode) + BLOCK_SIZE -1);
-	int number_of_inode_blocks = total_inode_size/BLOCK_SIZE;
+	int total_inode_size = (MAX_INUM*sizeof(struct inode) + BLOCK_SIZE -1); // Calculate the total size required for all inodes
+	int number_of_inode_blocks = total_inode_size/BLOCK_SIZE; // Calculate the number of blocks required to store all inodes
 	sb.i_start_blk = 3;
 	sb.d_bitmap_blk = sb.i_start_blk + number_of_inode_blocks;
 	
-	// initialize inode bitmap
+	// initialize inode bitmap (to zero using calloc)
+	bitmap_t inode_bitmap = (bitmap_t)calloc(1,BLOCK_SIZE);
+	if (!inode_bitmap) {
+        perror("Failed to allocate inode bitmap");
+        return -1;
+    }
+	bio_write(sb.i_bitmap_blk,inode_bitmap);  // Write the initialized inode bitmap to the disk
 
 	// initialize data block bitmap
+	bitmap_t data_bitmap = (bitmap_t)calloc(1, BLOCK_SIZE);
+    if (!data_bitmap) {
+        perror("Failed to allocate data block bitmap");
+        free(inode_bitmap);
+        return -1;
+    }
+    bio_write(sb.d_bitmap_blk, data_bitmap); // Write the initialized data block bitmap to the disk
 
 	// update bitmap information for root directory
+	set_bitmap(inode_bitmap,0); // set the 0th bit to 1
+	bio_write(sb.i_bitmap_blk, inode_bitmap); // rewrite
 
 	// update inode for root directory
+	struct inode root_inode;
+    root_inode.ino = 0;
+    root_inode.valid = 1;
+    root_inode.size = 0;  // Initially, size is 0
+    root_inode.type = S_IFDIR;  // Directory type
+    root_inode.link = 2;  // Standard for directories
+
+	// The first inode starts right after the inode bitmap
+    bio_write(sb.i_start_blk, &root_inode);
+
+    free(inode_bitmap);
+    free(data_bitmap);
 
 	return 0;
 }
