@@ -17,6 +17,9 @@
 #define MAX_INUM 1024
 #define MAX_DNUM 16384
 
+#define BLOCK_SIZE 4096
+#define INODE_SIZE sizeof(struct inode)
+#define INODES_PER_BLOCK (BLOCK_SIZE / INODE_SIZE)
 
 struct superblock {
 	uint32_t	magic_num;			/* magic number */
@@ -37,7 +40,7 @@ struct inode {
 	uint32_t	type;				/* type of the file */
 	uint32_t	link;				/* link count */
 	int			direct_ptr[16];		/* direct pointer to data block */
-	int			indirect_ptr[8];	/* indirect pointer to data block */
+	int			indirect_ptr[8];	/* indirect pointer to data block (not required to support indirect pointers) */
 	struct stat	vstat;				/* inode stat */
 };
 

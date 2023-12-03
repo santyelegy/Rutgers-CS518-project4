@@ -70,12 +70,36 @@ int get_avail_ino() {
 int get_avail_blkno() {
 
 	// Step 1: Read data block bitmap from disk
+	bitmap_t data_bitmap = (bitmap_t)malloc(BLOCK_SIZE);
+	if (!data_bitmap) {
+		perror("Failed to allocate memory for data block bitmap");
+		return -1;
+	}
+
+	// Assuming the data block bitmap is located at sb.d_bitmap_blk
+	if (bio_read(sb.d_bitmap_blk, data_bitmap) < 0) {
+		perror("Failed to read data block bitmap from disk");
+		free(data_bitmap);
+		return -1;
+	}
 	
 	// Step 2: Traverse data block bitmap to find an available slot
-
-	// Step 3: Update data block bitmap and write to disk 
-
-	return 0;
+	for (int i = 0; i < MAX_DNUM; i++) {
+		if (get_bitmap(data_bitmap, i) == 0) { // Found a free data block
+			// Step 3: Update data block bitmap and write to disk 
+			set_bitmap(data_bitmap, i);
+			if (bio_write(sb.d_bitmap_blk, data_bitmap) < 0) {
+				perror("Failed to write updated data block bitmap to disk");
+				free(data_bitmap);
+				return -1;
+			}
+			free(data_bitmap);
+			return i; // Return the available data block number
+		}
+	}
+	// No available data block found
+	free(data_bitmap);
+	return -1;
 }
 
 /* 
@@ -83,11 +107,25 @@ int get_avail_blkno() {
  */
 int readi(uint16_t ino, struct inode *inode) {
 
-  // Step 1: Get the inode's on-disk block number
+	// Step 1: Get the inode's on-disk block number
+	int block_num = sb.i_start_blk + ino/INODES_PER_BLOCK;
 
-  // Step 2: Get offset of the inode in the inode on-disk block
+	// Step 2: Get offset of the inode in the inode on-disk block
+	int offset = ino % INODES_PER_BLOCK;
 
-  // Step 3: Read the block from disk and then copy into inode structure
+	// Step 3: Read the block from disk and then copy into inode structure
+	struct inode * inode_block = (struct inode *)malloc(BLOCK_SIZE);
+	if (!inode_block) {
+		perror("Failed to allocate memory for inode block");
+		return -1;
+	}
+	if (bio_read(block_num, inode_block) < 0) {
+		perror("Failed to read inode block from disk");
+		free(inode_block);
+		return -1;
+	}
+	memcpy(inode, &inode_block[offset], sizeof(struct inode));
+	free(inode_block);
 
 	return 0;
 }
@@ -95,11 +133,29 @@ int readi(uint16_t ino, struct inode *inode) {
 int writei(uint16_t ino, struct inode *inode) {
 
 	// Step 1: Get the block number where this inode resides on disk
+	int block_num = sb.i_start_blk + ino/INODES_PER_BLOCK;
 	
 	// Step 2: Get the offset in the block where this inode resides on disk
+	int offset = ino % INODES_PER_BLOCK;
 
 	// Step 3: Write inode to disk 
-
+	struct inode * inode_block = (struct inode *)malloc(BLOCK_SIZE);
+	if (!inode_block) {
+		perror("Failed to allocate memory for inode block");
+		return -1;
+	}
+	if (bio_read(block_num, inode_block) < 0) {
+		perror("Failed to read inode block from disk");
+		free(inode_block);
+		return -1;
+	}
+	memcpy(&inode_block[offset], inode, sizeof(struct inode));
+	if (bio_write(block_num, inode_block) < 0) {
+		perror("Failed to write inode block to disk");
+		free(inode_block);
+		return -1;
+	}
+	free(inode_block);
 	return 0;
 }
 
@@ -109,12 +165,12 @@ int writei(uint16_t ino, struct inode *inode) {
  */
 int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *dirent) {
 
-  // Step 1: Call readi() to get the inode using ino (inode number of current directory)
+	// Step 1: Call readi() to get the inode using ino (inode number of current directory)
 
-  // Step 2: Get data block of current directory from inode
+	// Step 2: Get data block of current directory from inode
 
-  // Step 3: Read directory's data block and check each directory entry.
-  //If the name matches, then copy directory entry to dirent structure
+	// Step 3: Read directory's data block and check each directory entry.
+	//If the name matches, then copy directory entry to dirent structure
 
 	return 0;
 }
