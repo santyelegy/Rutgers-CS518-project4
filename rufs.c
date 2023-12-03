@@ -279,11 +279,23 @@ int rufs_mkfs() {
  * FUSE file operations
  */
 static void *rufs_init(struct fuse_conn_info *conn) {
-
+	struct stat stbuf;
 	// Step 1a: If disk file is not found, call mkfs
+	int result = stat(diskfile_path,&stbuf);
+	if(result == 1){
+		// does not exist
+		rufs_mkfs();
+	}else{
+		dev_open(diskfile_path);
+	}
 
-  // Step 1b: If disk file is found, just initialize in-memory data structures
-  // and read superblock from disk
+	// Step 1b: If disk file is found, just initialize in-memory data structures
+	// and read superblock from disk
+
+	// possibly put the superblock, inode, and dirent in heap here (malloc)
+
+	struct superblock sb;
+	bio_read(0,&sb); // read super block (at location 0)
 
 	return NULL;
 }
