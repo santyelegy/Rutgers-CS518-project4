@@ -173,7 +173,9 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 		free(inode);
 		return -1;
 	}
-
+	// get first name_len characters of fname
+	char * name = (char *)malloc(name_len);
+	memcpy(name, fname, name_len);
 	// Step 2: Get data block of current directory from inode
 	// don't support indirect pointer
 	for(int i = 0; i < inode->size; i++){
@@ -183,22 +185,26 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 			if (!dirent_block) {
 				perror("Failed to allocate memory for dirent block");
 				free(inode);
+				free(name);
 				return -1;
 			}
 			if (bio_read(inode->direct_ptr[i], dirent_block) < 0) {
 				perror("Failed to read dirent block from disk");
 				free(inode);
 				free(dirent_block);
+				free(name);
 				return -1;
 			}
 			// Step 3: Read directory's data block and check each directory entry.
 			//If the name matches, then copy directory entry to dirent structure
+			
 			for(int j = 0; j < DIRENTS_PER_BLOCK; j++){
-				if(dirent_block[j].valid == 1){
-					if(strcmp(dirent_block[j].name,fname) == 0){
+				if(dirent_block[j].valid == 1){		
+					if(strcmp(dirent_block[j].name,name) == 0){
 						memcpy(dirent, &dirent_block[j], sizeof(struct dirent));
 						free(inode);
 						free(dirent_block);
+						free(name);
 						return 0;
 					}
 				}
@@ -207,6 +213,8 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 		}
 	}
 	// not find
+	free(inode);
+	free(name);
 	return -1;
 }
 
@@ -329,12 +337,38 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 
 /* 
  * namei operation
+ * This is the actual namei function which follows a pathname until a terminal point is found. 
+ * To implement this function use the path, the inode number of the root of this path as input, 
+ * then call dir_find() to lookup each component in the path, 
+ * and finally read the inode of the terminal point to "struct inode *inode".
  */
 int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
+	size_t name_len = 0;
+	for(int i=0;i<strlen(path);i++){
+		if(path[i] == '/'){
+			name_len = 0;
+			break;
+		}else{
+			name_len++;
+		}
+	}
+	// check end condition, does not contain '/' in path
+	if(name_len == strlen(path)){
+		// end condition
+		// read inode
+		readi(ino, inode);
+		return 0;
+	}
+	struct dirent * dirent = (struct dirent *)malloc(sizeof(struct dirent));
+	dir_find(ino, path, name_len, dirent);
 
+	// recursive implementation
+	// + 1 to skip the '/'
+	get_node_by_path(path+name_len+1, dirent->ino, inode);
+	
 	return 0;
 }
 
