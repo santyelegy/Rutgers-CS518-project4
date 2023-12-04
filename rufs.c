@@ -166,32 +166,156 @@ int writei(uint16_t ino, struct inode *inode) {
 int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *dirent) {
 
 	// Step 1: Call readi() to get the inode using ino (inode number of current directory)
+	struct inode * inode = (struct inode *)malloc(sizeof(struct inode));
+	int result = readi(ino, inode);
+	if (result < 0) {
+		perror("Failed to read inode");
+		free(inode);
+		return -1;
+	}
 
 	// Step 2: Get data block of current directory from inode
-
-	// Step 3: Read directory's data block and check each directory entry.
-	//If the name matches, then copy directory entry to dirent structure
-
-	return 0;
+	// don't support indirect pointer
+	for(int i = 0; i < inode->size; i++){
+		// The directory pointer actually stores the block number of the data block
+		if(inode->direct_ptr[i] != 0){
+			struct dirent * dirent_block = (struct dirent *)malloc(BLOCK_SIZE);
+			if (!dirent_block) {
+				perror("Failed to allocate memory for dirent block");
+				free(inode);
+				return -1;
+			}
+			if (bio_read(inode->direct_ptr[i], dirent_block) < 0) {
+				perror("Failed to read dirent block from disk");
+				free(inode);
+				free(dirent_block);
+				return -1;
+			}
+			// Step 3: Read directory's data block and check each directory entry.
+			//If the name matches, then copy directory entry to dirent structure
+			for(int j = 0; j < DIRENTS_PER_BLOCK; j++){
+				if(dirent_block[j].valid == 1){
+					if(strcmp(dirent_block[j].name,fname) == 0){
+						memcpy(dirent, &dirent_block[j], sizeof(struct dirent));
+						free(inode);
+						free(dirent_block);
+						return 0;
+					}
+				}
+			}
+			free(dirent_block);
+		}
+	}
+	// not find
+	return -1;
 }
 
 int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t name_len) {
 
 	// Step 1: Read dir_inode's data block and check each directory entry of dir_inode
-	
-	// Step 2: Check if fname (directory name) is already used in other entries
-
+	for(int i=0;i<dir_inode.size;i++){
+		if(dir_inode.direct_ptr[i] != 0){
+			struct dirent * dirent_block = (struct dirent *)malloc(BLOCK_SIZE);
+			if (!dirent_block) {
+				perror("Failed to allocate memory for dirent block");
+				return -1;
+			}
+			if (bio_read(dir_inode.direct_ptr[i], dirent_block) < 0) {
+				perror("Failed to read dirent block from disk");
+				free(dirent_block);
+				return -1;
+			}
+			for(int j=0;j<DIRENTS_PER_BLOCK;j++){
+				if(dirent_block[j].valid == 0){
+					// Step 2: Check if fname (directory name) is already used in other entries
+					if(strcmp(dirent_block[j].name,fname) == 0){
+						perror("Directory name already used in other entries");
+						free(dirent_block);
+						return -1;
+					}
+				}
+			}
+			free(dirent_block);
+		}
+	}
 	// Step 3: Add directory entry in dir_inode's data block and write to disk
-
+	struct dirent * new_dirent = (struct dirent *)malloc(sizeof(struct dirent));
+	memset(new_dirent, 0, sizeof(struct dirent));
+	if (!new_dirent) {
+		perror("Failed to allocate memory for new dirent");
+		return -1;
+	}
+	new_dirent->ino = f_ino;
+	new_dirent->valid = 1;
+	memcpy(new_dirent->name, fname, name_len);
+	// find a free entry (valid == 0)
+	for(int i=0;i<dir_inode.size;i++){
+		struct dirent * dirent_block = (struct dirent *)malloc(BLOCK_SIZE);
+		if (!dirent_block) {
+			perror("Failed to allocate memory for dirent block");
+			return -1;
+		}
+		if (bio_read(dir_inode.direct_ptr[i], dirent_block) < 0) {
+			perror("Failed to read dirent block from disk");
+			free(dirent_block);
+			return -1;
+		}
+		for(int j=0;j<DIRENTS_PER_BLOCK;j++){
+			if(dirent_block[j].valid == 0){
+				memcpy(&dirent_block[j], new_dirent, sizeof(struct dirent));
+				if (bio_write(dir_inode.direct_ptr[i], dirent_block) < 0) {
+					perror("Failed to write dirent block to disk");
+					free(dirent_block);
+					free(new_dirent);
+					return -1;
+				}
+				free(dirent_block);
+				free(new_dirent);
+				return 0;
+			}
+		}
+		
+	}
+	// cannot find a free entry	
+	if(dir_inode.size == 16){
+		perror("cannot find a free entry");
+		free(new_dirent);
+		return -1;
+	}
 	// Allocate a new data block for this directory if it does not exist
-
+	int new_block_num = get_avail_blkno();
+	if (new_block_num < 0) {
+		perror("Failed to get an available block for directory");
+		free(new_dirent);
+		return -1;
+	}
+	// allocate a new data block
+	struct dirent * new_block = (struct dirent *)malloc(BLOCK_SIZE);
+	//zero out the new data block
+	memset(new_block, 0, BLOCK_SIZE);
+	// write the new directory entry to the new data block
+	memcpy(new_block, new_dirent, sizeof(struct dirent));
+	// write the new data block to disk
+	if (bio_write(new_block_num, new_block) < 0) {
+		perror("Failed to write new data block to disk");
+		free(new_block);
+		free(new_dirent);
+		return -1;
+	}
 	// Update directory inode
-
+	dir_inode.size += 1;
+	dir_inode.direct_ptr[dir_inode.size-1] = new_block_num;
 	// Write directory entry
-
+	if (writei(dir_inode.ino, &dir_inode) < 0) {
+		perror("Failed to write directory inode to disk");
+		free(new_dirent);
+		return -1;
+	}
+	free(new_dirent);
 	return 0;
 }
 
+// skip this
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 
 	// Step 1: Read dir_inode's data block and checks each directory entry of dir_inode
@@ -358,6 +482,7 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 	return 0;
 }
 
+//skip this
 static int rufs_rmdir(const char *path) {
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
@@ -432,6 +557,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 	return size;
 }
 
+//skip this
 static int rufs_unlink(const char *path) {
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name

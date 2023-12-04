@@ -20,6 +20,8 @@
 #define BLOCK_SIZE 4096
 #define INODE_SIZE sizeof(struct inode)
 #define INODES_PER_BLOCK (BLOCK_SIZE / INODE_SIZE)
+#define DIRENT_SIZE sizeof(struct dirent)
+#define DIRENTS_PER_BLOCK (BLOCK_SIZE / DIRENT_SIZE)
 
 struct superblock {
 	uint32_t	magic_num;			/* magic number */
