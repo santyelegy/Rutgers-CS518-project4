@@ -463,7 +463,7 @@ static void rufs_destroy(void *userdata) {
 	// Step 1: De-allocate in-memory data structures
 
 	// Step 2: Close diskfile
-
+	dev_close();
 }
 
 static int rufs_getattr(const char *path, struct stat *stbuf) {
@@ -543,26 +543,67 @@ static int rufs_releasedir(const char *path, struct fuse_file_info *fi) {
 static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name
+	char *path_copy1 = strdup(path);
+	char *path_copy2 = strdup(path);
+	char *dir_path = dir_name(path_copy1);
+	char *file_name = basename(path_copy2);
 
 	// Step 2: Call get_node_by_path() to get inode of parent directory
+	struct inode parent_inode;
+	if(get_node_by_path(dir_path,&parent_inode)==-1){
+		// parent directory not found
+		free(path_copy1);
+		free(path_copy2);
+		return -1;
+	}
 
 	// Step 3: Call get_avail_ino() to get an available inode number
+	int ino = get_avail_ino();
+	if(ino==-1){
+		// no availiable inode
+		free(path_copy1);
+		free(path_copy2);
+		return -1;
+	}
 
 	// Step 4: Call dir_add() to add directory entry of target file to parent directory
+	if(dir_add(parent_inode,ino,filename,mode)==-1){
+		// failed to add directory entry
+		free(path_copy1);
+		free(path_copy2);
+		return -1;
+	}
 
 	// Step 5: Update inode for target file
+	struct inode new_inode;
+	new_inode.ino = ino;
+	new_inode.valid =1;
+	new_inode.size = 0;  // New file, so size is 0
+    new_inode.type = S_IFREG;  // Regular file type
+    new_inode.link = 1;  // Initial link count
+	// Initialize direct and indirect pointers to -1 
+    for (int i = 0; i < 16; i++) new_inode.direct_ptr[i] = -1;
+    for (int i = 0; i < 8; i++) new_inode.indirect_ptr[i] = -1;
 
 	// Step 6: Call writei() to write inode to disk
+	writei(ino,&new_inode);
 
+	free(path_copy1);
+    free(path_copy2);
 	return 0;
 }
 
 static int rufs_open(const char *path, struct fuse_file_info *fi) {
 
 	// Step 1: Call get_node_by_path() to get inode from path
-
+	struct inode file_inode;
+	if(get_node_by_path(path,&file_inode)==-1){
+		// file not found
+		return -1;
+	}
 	// Step 2: If not find, return -1
-
+	// use fi pointer??
+	
 	return 0;
 }
 
