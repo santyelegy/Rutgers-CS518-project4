@@ -26,6 +26,7 @@ char diskfile_path[PATH_MAX];
 
 // Declare your in-memory data structures here
 struct superblock sb;
+#define ROOT_INO 2
 /* 
  * Get available inode number from bitmap
  */
@@ -567,7 +568,7 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	}
 
 	// Step 4: Call dir_add() to add directory entry of target file to parent directory
-	if(dir_add(parent_inode,ino,filename,mode)==-1){
+	if(dir_add(parent_inode,ino,file_name,mode)==-1){
 		// failed to add directory entry
 		free(path_copy1);
 		free(path_copy2);
@@ -610,13 +611,42 @@ static int rufs_open(const char *path, struct fuse_file_info *fi) {
 static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
 
 	// Step 1: You could call get_node_by_path() to get inode from path
+	struct inode file_inode;
+	if (get_node_by_path(path,ROOT_INO, &file_inode) == -1) {
+		// File is not found
+        return -1; 
+    }
+	if(offset >= file_inode.size){
+		// No data is read
+		return 0;
+	}
+	if(offset + size > file_inode.size){
+		// Adjust size if offset + size is beyond the end of the file
+		size = file_inode.size - offset;
+	}
 
 	// Step 2: Based on size and offset, read its data blocks from disk
+	char temp_block[BLOCK_SIZE];
+	size_t bytes_read = 0;
+	while(bytes_read<size){
+		int block_num = offset / BLOCK_SIZE;
+		int block_offset = offset % BLOCK_SIZE;
+		int bytesToRead = BLOCK_SIZE - block_offset;
+		if(bytes_read>size - bytes_read){
+			bytes_read= size - bytes_read;
+		}
+		// Read block from disk into temp block
+		bio_read(file_inode.direct_ptr[block_num],temp_block)
+		// Step 3: copy the correct amount of data from offset to buffer
+		memcpy(buffer+bytes_read,temp_block+block_offset,bytesToRead);
+		bytes_read+=bytesToRead;
+		offset+=bytesToRead;
+	}
 
-	// Step 3: copy the correct amount of data from offset to buffer
+	
 
 	// Note: this function should return the amount of bytes you copied to buffer
-	return 0;
+	return bytes_read;
 }
 
 static int rufs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
