@@ -551,7 +551,7 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
 	// Step 2: Call get_node_by_path() to get inode of parent directory
 	struct inode parent_inode;
-	if(get_node_by_path(dir_path,&parent_inode)==-1){
+	if(get_node_by_path(dir_path,ROOT_INO,&parent_inode)==-1){
 		// parent directory not found
 		free(path_copy1);
 		free(path_copy2);
@@ -598,7 +598,7 @@ static int rufs_open(const char *path, struct fuse_file_info *fi) {
 
 	// Step 1: Call get_node_by_path() to get inode from path
 	struct inode file_inode;
-	if(get_node_by_path(path,&file_inode)==-1){
+	if(get_node_by_path(path,ROOT_INO,&file_inode)==-1){
 		// file not found
 		return -1;
 	}
