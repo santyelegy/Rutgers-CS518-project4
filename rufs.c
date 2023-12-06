@@ -440,6 +440,7 @@ int rufs_mkfs() {
 static void *rufs_init(struct fuse_conn_info *conn) {
 	struct stat stbuf;
 	// Step 1a: If disk file is not found, call mkfs
+	printf("In rufs_init\n");
 	int result = stat(diskfile_path,&stbuf);
 	if(result == 1){
 		// does not exist
@@ -546,7 +547,7 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name
 	char *path_copy1 = strdup(path);
 	char *path_copy2 = strdup(path);
-	char *dir_path = dir_name(path_copy1);
+	char *dir_path = dirname(path_copy1);
 	char *file_name = basename(path_copy2);
 
 	// Step 2: Call get_node_by_path() to get inode of parent directory
@@ -636,7 +637,7 @@ static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, 
 			bytes_read= size - bytes_read;
 		}
 		// Read block from disk into temp block
-		bio_read(file_inode.direct_ptr[block_num],temp_block)
+		bio_read(file_inode.direct_ptr[block_num],temp_block);
 		// Step 3: copy the correct amount of data from offset to buffer
 		memcpy(buffer+bytes_read,temp_block+block_offset,bytesToRead);
 		bytes_read+=bytesToRead;

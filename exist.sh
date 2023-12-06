@@ -1,0 +1,1 @@
+fusermount -u /tmp/yw1017/mountdir
