@@ -9,6 +9,7 @@
 #include <linux/limits.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <errno.h>
 
 #ifndef _TFS_H
 #define _TFS_H
