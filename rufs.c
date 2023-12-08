@@ -182,7 +182,12 @@ int writei(uint16_t ino, struct inode *inode)
  */
 int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *dirent)
 {
-	// printf("calling dir_find with parameters: ino: %d, fname: %s, name_len: %d\n", ino, fname, name_len);
+	// get first name_len characters of fname
+	char *name = (char *)malloc(name_len + 1);
+	strncpy(name, fname, name_len);
+	name[name_len] = '\0';
+	
+	printf("calling dir_find with parameters: ino: %d, fname: %s, name_len: %d, name: %s\n", ino, fname, name_len, name);
 
 	// Step 1: Call readi() to get the inode using ino (inode number of current directory)
 	struct inode *inode = (struct inode *)malloc(sizeof(struct inode));
@@ -193,10 +198,7 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 		free(inode);
 		return -1;
 	}
-	// get first name_len characters of fname
-	char *name = (char *)malloc(name_len + 1);
-	strncpy(name, fname, name_len);
-	name[name_len] = '\0';
+	
 	// Step 2: Get data block of current directory from inode
 	// don't support indirect pointer
 	for (int i = 0; i < inode->size; i++)
@@ -229,6 +231,7 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 				{
 					if (strcmp(dirent_block[j].name, name) == 0)
 					{
+						printf("find directory entry with name: %s, ino: %d\n", dirent_block[j].name, dirent_block[j].ino);
 						memcpy(dirent, &dirent_block[j], sizeof(struct dirent));
 						free(inode);
 						free(dirent_block);
@@ -420,10 +423,11 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode)
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
 	// if input path is '/', return ino
-	if (strcmp(path, "/") == 0)
+	if (strcmp(path, "/") == 0 || strcmp(path, "") == 0)
 	{
+
 		readi(ino, inode);
-		printf("find root directory inode with id: %d, type: %d expected type: %d, size: %d\n", ino, inode->type, S_IFDIR, inode->size);
+		printf("find directory inode with id: %d, type: %d expected type: %d, size: %d\n", ino, inode->type, S_IFDIR, inode->size);
 		// printf("Successfully find directory inode with id: %d\n", inode->ino);
 		return 0;
 	}
@@ -432,12 +436,12 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode)
 	{
 		path++;
 	}
+	printf("path: %s\n", path);
 	size_t name_len = 0;
 	for (int i = 0; i < strlen(path); i++)
 	{
 		if (path[i] == '/')
 		{
-			name_len = 0;
 			break;
 		}
 		else
@@ -456,6 +460,7 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode)
 	}
 	struct dirent *dirent = (struct dirent *)malloc(sizeof(struct dirent));
 	int success = dir_find(ino, path, name_len, dirent);
+	printf("dir find result %d\n", success);
 
 	if (success < 0)
 	{
@@ -463,10 +468,21 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode)
 		return -ENOENT;
 	}
 
+	// if is directory
+	if(name_len == strlen(path)){
+		// end condition
+		readi(dirent->ino, inode);
+		printf("find directory inode with id: %d, type: %d expected type: %d, size: %d\n", dirent->ino, inode->type, S_IFDIR, inode->size);
+		return 0;
+	}
 	// recursive implementation
 	// + 1 to skip the '/'
-	get_node_by_path(path + name_len + 1, dirent->ino, inode);
-
+	success = get_node_by_path(path + name_len + 1, dirent->ino, inode);
+	if (success < 0)
+	{
+		// not found
+		return -ENOENT;
+	}
 	return 0;
 }
 
@@ -580,6 +596,7 @@ static int rufs_getattr(const char *path, struct stat *stbuf)
 {
 
 	// Step 1: call get_node_by_path() to get inode from path
+	printf("calling rufs_getattr with parameters: path: %s\n", path);
 	struct inode *inode = (struct inode *)malloc(sizeof(struct inode));
 	int success = get_node_by_path(path, ROOT_INO, inode);
 	if (success < 0)
@@ -683,6 +700,7 @@ static int rufs_mkdir(const char *path, mode_t mode)
 	if (get_node_by_path(dir_path, ROOT_INO, &parent_inode) < 0)
 	{
 		// parent directory not found
+		printf("parent directory not found\n");
 		free(path_copy1);
 		free(path_copy2);
 		return -ENOENT;
@@ -692,6 +710,7 @@ static int rufs_mkdir(const char *path, mode_t mode)
 	int ino = get_avail_ino();
 
 	// Step 4: Call dir_add() to add directory entry of target directory to parent directory
+	printf("adding directory entry with ino: %d to parent directory with id: %d\n",ino, parent_inode.ino);
 	if (dir_add(parent_inode, ino, file_name, strlen(file_name)) == -1)
 	{
 		// failed to add directory entry

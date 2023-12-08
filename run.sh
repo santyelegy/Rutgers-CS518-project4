@@ -5,4 +5,4 @@ rm -rf DISKFILE
 cd benchmark
 make clean
 make
-./test_case
+./simple_test
