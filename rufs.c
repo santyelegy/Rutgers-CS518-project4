@@ -415,7 +415,7 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len)
  */
 int get_node_by_path(const char *path, uint16_t ino, struct inode *inode)
 {
-	// printf("calling get_node_by_path with parameters: path: %s, ino: %d\n", path, ino);
+	printf("calling get_node_by_path with parameters: path: %s, ino: %d\n", path, ino);
 
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
@@ -423,6 +423,7 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode)
 	if (strcmp(path, "/") == 0)
 	{
 		readi(ino, inode);
+		printf("find root directory inode with id: %d, type: %d expected type: %d, size: %d\n", ino, inode->type, S_IFDIR, inode->size);
 		// printf("Successfully find directory inode with id: %d\n", inode->ino);
 		return 0;
 	}
@@ -448,9 +449,9 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode)
 	// check end condition, if inode is a file, return
 	readi(ino, inode);
 	// if is file
-	if (inode->type == S_IFREG)
+	if (inode-> valid && inode->type == S_IFREG)
 	{
-		// printf("find inode: %d\n", ino);
+		printf("find file inode: %d, name_len: %d, name: %s type: %d expected type: %d\n", ino, name_len, path, inode->type, S_IFREG);
 		return 0;
 	}
 	struct dirent *dirent = (struct dirent *)malloc(sizeof(struct dirent));
@@ -489,7 +490,7 @@ int rufs_mkfs()
 	int total_inode_size = (MAX_INUM * sizeof(struct inode) + BLOCK_SIZE - 1); // Calculate the total size required for all inodes
 	int number_of_inode_blocks = total_inode_size / BLOCK_SIZE;				   // Calculate the number of blocks required to store all inodes
 	sb.i_start_blk = sb.d_bitmap_blk + 1;
-	sb.d_bitmap_blk = sb.i_start_blk + number_of_inode_blocks;
+	sb.d_start_blk = sb.i_start_blk + number_of_inode_blocks;
 
 	// write super block to disk
 	char temp_buffer[BLOCK_SIZE];
@@ -514,9 +515,9 @@ int rufs_mkfs()
 		free(inode_bitmap);
 		return -1;
 	}
-	set_bitmap(data_bitmap, sb.d_bitmap_blk);
-	set_bitmap(data_bitmap, sb.i_bitmap_blk);
-	set_bitmap(data_bitmap, 0);
+	for(int i=0;i< sb.d_start_blk; i++){
+		set_bitmap(data_bitmap, i);
+	}
 	bio_write(sb.d_bitmap_blk, data_bitmap); // Write the initialized data block bitmap to the disk
 
 	// update inode for root directory
@@ -671,16 +672,46 @@ static int rufs_mkdir(const char *path, mode_t mode)
 {
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
+	char *path_copy1 = strdup(path);
+	char *path_copy2 = strdup(path);
+	char *dir_path = dirname(path_copy1);
+	char *file_name = basename(path_copy2);
+	printf("calling rufs_mkdir with parameters: dir_path: %s, file_name: %s\n", dir_path, file_name);
 
 	// Step 2: Call get_node_by_path() to get inode of parent directory
-
+	struct inode parent_inode;
+	if (get_node_by_path(dir_path, ROOT_INO, &parent_inode) < 0)
+	{
+		// parent directory not found
+		free(path_copy1);
+		free(path_copy2);
+		return -ENOENT;
+	}
+	
 	// Step 3: Call get_avail_ino() to get an available inode number
+	int ino = get_avail_ino();
 
 	// Step 4: Call dir_add() to add directory entry of target directory to parent directory
-
+	if (dir_add(parent_inode, ino, file_name, strlen(file_name)) == -1)
+	{
+		// failed to add directory entry
+		free(path_copy1);
+		free(path_copy2);
+		return -1;
+	}
 	// Step 5: Update inode for target directory
-
+	struct inode new_inode;
+	new_inode.ino = ino;
+	new_inode.valid = 1;
+	new_inode.size = 0;		 // New directory, so size is 0
+	new_inode.type = S_IFDIR; // Directory type
+	new_inode.link = 2;		 // Initial link count
+	// Initialize direct and indirect pointers to 0
+	for (int i = 0; i < 16; i++){
+		new_inode.direct_ptr[i] = 0;
+	}
 	// Step 6: Call writei() to write inode to disk
+	writei(ino, &new_inode);
 
 	return 0;
 }
@@ -713,7 +744,7 @@ static int rufs_releasedir(const char *path, struct fuse_file_info *fi)
 
 static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-	// printf("In rufs_create\n");
+	printf("CREATE: In rufs_create\n");
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name
 	char *path_copy1 = strdup(path);
@@ -765,6 +796,8 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 		new_inode.direct_ptr[i] = 0;
 	for (int i = 0; i < 8; i++)
 		new_inode.indirect_ptr[i] = 0;
+	
+	printf("creating new inode with id: %d\n", ino);
 
 	// Step 6: Call writei() to write inode to disk
 	writei(ino, &new_inode);
@@ -887,6 +920,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 		// Read the block from disk if partial write
 		if (block_offset != 0 || bytes_to_write < BLOCK_SIZE)
 		{
+			printf("detect partial write, reading block %d\n", file_inode.direct_ptr[block_num]);
 			bio_read(file_inode.direct_ptr[block_num], temp_block);
 		}
 		else
@@ -919,7 +953,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 	}
 
 	// Step 4: Update the inode info and write it to disk
-	writei(ROOT_INO, &file_inode);
+	writei(file_inode.ino, &file_inode);
 	// Note: this function should return the amount of bytes you write to disk
 	return bytes_written;
 }

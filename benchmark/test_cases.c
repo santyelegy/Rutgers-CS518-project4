@@ -34,7 +34,6 @@ int main(int argc, char **argv) {
 	}
 	printf("TEST 1: File create Success \n");
 
-
 	/* TEST 2: file small write test */
 	for (i = 0; i < ITERS; i++) {
 		//memset with some random data
