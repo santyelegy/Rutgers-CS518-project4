@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
 	
 	fstat(fd, &st);
 	if (st.st_size != ITERS*BLOCKSIZE) {
-		printf("TEST 2: File write failure \n");
+		printf("TEST 2: File write failure, write count mismatch \n");
 		exit(1);
 	}
 	printf("TEST 2: File write Success \n");
