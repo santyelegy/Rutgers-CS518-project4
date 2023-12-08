@@ -751,15 +751,43 @@ static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, 
 
 static int rufs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
 	// Step 1: You could call get_node_by_path() to get inode from path
-
+	struct inode file_inode;
+	if(get_node_by_path(path,ROOT_INO,&file_inode)==-1){
+		// File not found
+		return -1;
+	}
 	// Step 2: Based on size and offset, read its data blocks from disk
+	char temp_block[BLOCK_SIZE];
+    size_t bytes_written = 0;
+    while (bytes_written < size) {
+        int block_num = (offset + bytes_written) / BLOCK_SIZE;
+        int block_offset = (offset + bytes_written) % BLOCK_SIZE;
+        int space_in_block = BLOCK_SIZE - block_offset;
+        int bytes_to_write = space_in_block < (size - bytes_written) ? space_in_block : (size - bytes_written);
+
+        // Read the block from disk if partial write
+        if (block_offset != 0 || bytes_to_write < BLOCK_SIZE) {
+            bio_read(file_inode.direct_ptr[block_num], temp_block);
+        }
+
+        // Write the data from buffer to the temporary block
+        memcpy(temp_block + block_offset, buffer + bytes_written, bytes_to_write);
+
+        // Write the modified block back to disk
+        bio_write(file_inode.direct_ptr[block_num], temp_block);
+
+        // Update bytes_written
+        bytes_written += bytes_to_write;
+    }
 
 	// Step 3: Write the correct amount of data from offset to disk
-
+	if (offset + size > file_inode.size) {
+        file_inode.size = offset + size;  // Update the file size if it's grown
+    }
 	// Step 4: Update the inode info and write it to disk
-
+	writei(ROOT_INO, &file_inode);
 	// Note: this function should return the amount of bytes you write to disk
-	return size;
+	return bytes_written;
 }
 
 //skip this
