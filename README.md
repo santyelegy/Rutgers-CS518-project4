@@ -1,3 +1,9 @@
+# RUFS: use FUSE to build file system in user space
+
+score 100/100
+
+didn't implement extra credit
+
 TODO:
 - [ ] rufs_destroy
 - [ ] rufs_getattr
